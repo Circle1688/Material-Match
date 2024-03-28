@@ -10,7 +10,8 @@ from omni.kit.widget.stage import StageIcons
 import omni.kit.pipapi
 omni.kit.pipapi.install("fuzzywuzzy")
 
-from fuzzywuzzy import process
+# from fuzzywuzzy import process
+from fuzzywuzzy import fuzz
 
 class MatchItem(ui.AbstractItem):
     """Single item of the model"""
@@ -86,7 +87,9 @@ class ComboModel(ui.AbstractItemModel):
             ComboItem(text)
             for text in matchs
         ]
+
         self._current_index.set_value(self.matchs.index(match))
+        
 
     def get_item_children(self, item):
         return self._items
@@ -154,7 +157,7 @@ class MaterialMatchWindow(ui.Window):
         with self.frame:
             with ui.VStack(spacing=5):
                 with ui.HStack(spacing=5, height=0):
-                    ui.Label('Materials Looks Path', width=140)
+                    ui.Label('Vred Looks Path', width=140)
                     with ui.VStack(height=0):
                         ui.Spacer(height=3)
                         self.materials_path_field = ui.StringField(width=ui.Fraction(2), height=22)
@@ -244,6 +247,7 @@ class MaterialMatchWindow(ui.Window):
         results = self.classify_by_similarity(material_names, matchs)
 
         self._match_model.clear()
+        matchs.insert(0, "None")
         for key, value in results.items():
             self._match_model.add_item(key, value, matchs)
         self.process_btn.enabled=True
@@ -252,13 +256,14 @@ class MaterialMatchWindow(ui.Window):
         results = self._match_model.get_values_dict()
         with omni.kit.undo.group():
             for name in results.keys():
-                material_path = self.materials_path + '/' + name
-                prims_paths = self.get_bound_objects_paths(material_path)
-                target_material_path = self.replace_path + '/' + results[name]
-                
-                omni.kit.commands.execute('BindMaterialCommand',
-                    prim_path=prims_paths,
-                    material_path=target_material_path)
+                if results[name] != "None":
+                    material_path = self.materials_path + '/' + name
+                    prims_paths = self.get_bound_objects_paths(material_path)
+                    target_material_path = self.replace_path + '/' + results[name]
+                    
+                    omni.kit.commands.execute('BindMaterialCommand',
+                        prim_path=prims_paths,
+                        material_path=target_material_path)
 
     def get_children_paths(self, parent_path):
         stage = omni.usd.get_context().get_stage()
@@ -290,11 +295,32 @@ class MaterialMatchWindow(ui.Window):
         return prim.GetName()
     
     def classify_by_similarity(self, texts, labels):
-        results = {}
-        classifications = [process.extractOne(text, labels)[0] for text in texts]
-        for text, classification in zip(texts, classifications):
-            results[text] = classification
+        # results = {}
+        # classifications = [process.extractOne(text, labels)[0] for text in texts]
+        # for text, classification in zip(texts, classifications):
+        #     results[text] = classification
 
-        return results
+        # return results
+
+
+        # 设置相似度阈值
+        threshold = 60
+
+        # 初始化分类结果字典
+        categorized_dict = {}
+
+        # 对于每一个待分类项
+        for item in texts:
+            max_ratio = 0
+            matched_label = "None"
+            for label in labels:
+                ratio = fuzz.token_set_ratio(item, label)
+                if ratio > max_ratio:
+                    max_ratio = ratio
+                    matched_label = label if max_ratio >= threshold else "None"
+            
+            categorized_dict[item] = matched_label
+
+        return categorized_dict
 
     
